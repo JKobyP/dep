@@ -148,6 +148,10 @@ func (cmd *initCommand) Run(ctx *dep.Ctx, args []string) error {
 	rootAnalyzer := newRootAnalyzer(cmd.skipTools, ctx, directDeps, sm)
 	p.Manifest, p.Lock, err = rootAnalyzer.InitializeRootManifestAndLock(root, p.ImportRoot)
 	if err != nil {
+		innerErr := writePartialProgress(err, p.Manifest, root, ctx.Err)
+		if innerErr != nil {
+			return errors.Wrap(err, innerErr.Error())
+		}
 		return err
 	}
 
@@ -248,4 +252,15 @@ func getDirectDependencies(sm gps.SourceManager, p *dep.Project) (pkgtree.Packag
 // TODO solve failures can be really creative - we need to be similarly creative
 // in handling them and informing the user appropriately
 func handleAllTheFailuresOfTheWorld(err error) {
+}
+
+// write the partial manifest that had been resolved before the error occurred
+func writePartialProgress(err error, m *dep.Manifest, root string, logger *log.Logger) error {
+	logger.Printf("Failed to init, writing out partial Gopkg.toml")
+	logger.Printf("Manifest: %+v", *m)
+	sw, err := dep.NewSafeWriter(m, nil, nil, dep.VendorNever)
+	if err != nil {
+		return err
+	}
+	return sw.Write(root, nil, false, logger)
 }
